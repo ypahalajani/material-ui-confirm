@@ -1,4 +1,4 @@
-import React, { useState, useCallback, Fragment } from 'react';
+import React, { useState, useCallback, Fragment, useEffect } from 'react';
 import ConfirmContext from './ConfirmContext';
 import ConfirmationDialog from './ConfirmationDialog';
 
@@ -40,28 +40,48 @@ const buildOptions = (defaultOptions, options) => {
 const ConfirmProvider = ({ children, defaultOptions = {} }) => {
   const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...defaultOptions });
   const [resolveReject, setResolveReject] = useState([]);
-  const [resolve, reject] = resolveReject;
+  const [resolve, reject] = resolveReject
+  /**
+   * Possible states:
+   * 1. "Idle" initially
+   * 2. "Open" when `confirm` is called
+   * 3. "Submitting" when confimation or cancellation button is pressed.
+   * After submitting, the state is back to "Idle" since the Dialog is closed.
+   */
+  const [state, setState] = useState('idle');
 
   const confirm = useCallback((options = {}) => {
     return new Promise((resolve, reject) => {
       setOptions(buildOptions(defaultOptions, options));
       setResolveReject([resolve, reject]);
+      setState('open')
     });
   }, []);
 
   const handleClose = useCallback(() => {
     setResolveReject([]);
+    setState('idle');
   }, []);
 
   const handleCancel = useCallback(() => {
-    reject();
-    handleClose();
-  }, [reject, handleClose]);
+    if (state === 'open') {
+      reject();
+      setState('submitting');
+    }
+  }, [reject]);
 
   const handleConfirm = useCallback(() => {
-    resolve();
-    handleClose();
-  }, [resolve, handleClose]);
+    if (state === 'open') {
+      resolve();
+      setState('submitting');
+    }
+  }, [resolve, state]);
+
+  useEffect(() => {
+    if (state === 'submitting') {
+      handleClose();
+    }
+  }, [state])
 
   return (
     <Fragment>
@@ -69,7 +89,7 @@ const ConfirmProvider = ({ children, defaultOptions = {} }) => {
         {children}
       </ConfirmContext.Provider>
       <ConfirmationDialog
-        open={resolveReject.length === 2}
+        open={state === 'open'}
         options={options}
         onClose={handleClose}
         onCancel={handleCancel}
